@@ -8,6 +8,8 @@ from pyspark.sql.functions import col
 import logging
 import datetime
 import os
+import boto3
+import json
 
 # Step 1: Initialize GlueContext and Logger
 sc = SparkContext()
@@ -17,6 +19,19 @@ spark = glueContext.spark_session
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s')
+
+def get_secrets(secret_name: str, region_name: str = "us-east-1") -> dict:
+    """Fetches credentials from AWS Secrets Manager."""
+    logger.info(f"Fetching secrets for {secret_name} from AWS Secrets Manager")
+    session = boto3.session.Session()
+    client = session.client(service_name="secretsmanager", region_name=region_name)
+    try:
+        secret_response = client.get_secret_value(SecretId=secret_name)
+        secret = secret_response.get("SecretString")
+        return json.loads(secret) if secret else {}
+    except Exception as e:
+        logger.error(f"Unable to fetch secrets: {str(e)}")
+        raise
 
 def get_file_path(base_path: str, cycle_number: str = "0", date_format: str = "%d%m%Y%H%M") -> str:
     """Generates the file path based on the cycle number and current date-time."""
@@ -68,14 +83,19 @@ def main():
     try:
         logger.info("Starting the Glue job")
 
-        # Paths and MongoDB connection details
+        # Paths and Secrets
         base_path = "s3://your-bucket-name/path_to_files/"
         cycle_number = "0"  # This should be dynamically set if needed
         transactions_path = get_file_path(base_path, cycle_number)
         charges_path = "s3://your-bucket-name/path_to_charges_file.csv"
-        mongo_uri = "mongodb://your_mongo_host:your_mongo_port"
-        mongo_database = "your_database_name"
-        mongo_collection = "filtered_transactions"
+
+        # Fetch MongoDB credentials from AWS Secrets Manager
+        secret_name = "your_secret_name"
+        region_name = "us-east-1"
+        secrets = get_secrets(secret_name, region_name)
+        mongo_uri = secrets.get("mongo_uri")
+        mongo_database = secrets.get("database_name")
+        mongo_collection = secrets.get("collection_name")
 
         # Step 2: Read data
         df_transactions = read_data_from_s3(transactions_path)

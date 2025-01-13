@@ -42,14 +42,16 @@ def get_file_path(base_path: str, cycle_number: str = "0", date_format: str = "%
     return file_path
 
 def read_data_from_s3(s3_path: str, format: str = "csv", has_header: bool = True) -> DataFrame:
-    """Reads data from an S3 location and returns a DataFrame."""
+    """Reads data from an S3 location and returns a DataFrame with selected columns."""
     logger.info(f"Reading data from S3 path: {s3_path}")
-    return glueContext.create_dynamic_frame.from_options(
+    df = glueContext.create_dynamic_frame.from_options(
         connection_type="s3",
         connection_options={"paths": [s3_path]},
         format=format,
         format_options={"withHeader": has_header}
     ).toDF()
+    selected_columns = ["AGGREGATORCODE", "MERCHANTID", "MCC_CODE", "PAYER_VPA", "RESPONSE_CODE", "TRANSACTION_STATUS", "AMOUNT"]
+    return df.select(*selected_columns)
 
 def filter_transactions(df: DataFrame) -> DataFrame:
     """Filters transactions based on RESPONSE_CODE and TRANSACTION_STATUS."""
